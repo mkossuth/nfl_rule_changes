@@ -8,6 +8,16 @@ This is a temporary script file.
 import pandas as pd
 import re
 import numpy as np
+
+
+def get_kick_distance(kick):
+    """get kickoff location."""
+    kick_loc = [m.end() for m in re.finditer("kicks", kick)]
+    yards_loc = [m.start() for m in re.finditer("yard", kick)]
+    yards_loc = [idx for idx in yards_loc if idx > kick_loc[0]]
+    kick_dist = int(kick[kick_loc[0]:(yards_loc[0] - 1)])
+    return kick_dist, kick_loc, yards_loc
+    
 # TODO look at results of drive to see how often score based on kickoff
 # TODO need to consider multiple things happening on kickoff, so can't use elif
 # TODO need to do if statements for all tests
@@ -35,20 +45,25 @@ for idx, kick_row in data[
     kick = kick_row.description
     #  Check if kick off touchdown #(?=.*TOUCHDOWN)")
     if kick.lower().find("onside") != -1:
-        print("Onside")
-        print(kick)
+        pass
+        #print("Onside")
+        #print(kick)
     elif kick.lower().find("penalty") != -1:
-        print("penalty")
-        print(kick)
+        pass
+        #print("penalty")
+        #print(kick)
     elif kick.lower().find("fumble") != -1 or kick.lower().find("muff") != -1:
-        print("fumble")
-        print(kick)
+        pass
+        #print("fumble")
+        #print(kick)
     elif kick.lower().find("field goal") != -1:
-        print("random field goal issue")
-        print(kick)
+        pass
+        #print("random field goal issue")
+        #print(kick)
     elif kick.lower().find("lateral") != -1:
-        print("lateral")
-        print(kick)
+        pass
+        #print("lateral")
+        #print(kick)
     elif kick.lower().find("touchdown") != -1:
         print("touchdown")
         print(kick)
@@ -61,8 +76,8 @@ for idx, kick_row in data[
         kick_history_dict["pushed_ob"] = 0
         kick_history_dict["kicked_ob"] = 0
         kick_history_dict["ran_ob"] = 0
-        kick_loc = [m.end() for m in re.finditer("kicks", kick)]
-        yards_loc = [m.start() for m in re.finditer("yard", kick)]
+        kick_history_dict["kick_dist"], kick_loc, yards_loc \
+            = get_kick_distance(kick)
         period_loc = [m.start() for m in re.finditer("\.", kick)]
         period_loc = np.array(period_loc)
         sum_period_loc = np.sum(period_loc < kick_loc[0])
@@ -91,8 +106,6 @@ for idx, kick_row in data[
         ] = str.split(kick_history_dict["from_yd"])
         kick_history_dict["from_yd_line"] \
             = int(kick_history_dict["from_yd_line"])
-        kick_history_dict["kick_dist"] \
-            = int(kick[kick_loc[0]:(yards_loc[0]-1)])
         kick_history_dict["to_yd"] = kick[to_loc_end[0]:(period_loc[0])]
         if kick.lower().find("touchback") != -1:
             kick_history_dict["touchback"] = 1
@@ -117,6 +130,9 @@ for idx, kick_row in data[
                         data.loc[idx+1, "def"],
                         data.loc[idx+1, "ydline"]
                     )
+        elif kick.lower().find("touchdown") != -1:
+            pass
+            
         else:
             [
                 kick_history_dict["to_tm_yd"],
