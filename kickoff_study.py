@@ -33,9 +33,26 @@ def initialize_kickoff_dictionary():
     return kick_history_dict
 
 
-def clean_kick_row(kick):
+def clean_kick_row(kick, kick_loc, yards_loc):
     """Clean kick row for extraneous sentences."""
-    
+    period_loc = [m.start() for m in re.finditer("\.", kick)]
+    period_loc = np.array(period_loc)
+    sum_period_loc = np.sum(period_loc < kick_loc[0])
+    first_item_loc \
+        = period_loc[np.max(np.where(period_loc < kick_loc[0]))] - 1
+    period_loc = period_loc[period_loc > kick_loc[0]]
+    if sum_period_loc > 1:
+        # Need to clean up values in case there is some random sentence
+        # before kick off info
+        kick = kick[first_item_loc:]
+        kick_loc = [m.end() for m in re.finditer("kicks", kick)]
+        yards_loc = [m.start() for m in re.finditer("yard", kick)]
+        period_loc = [m.start() for m in re.finditer("\.", kick)]
+        period_loc = np.array(period_loc)
+        period_loc = period_loc[period_loc > kick_loc[0]]    
+    return kick, kick_loc, yards_loc, period_loc
+
+
 def get_kickoff_location(kick, kick_history_dict):
     """Get kickoff location and return line and team side."""
     from_loc_end = [m.end() for m in re.finditer("from", kick)]
@@ -115,21 +132,9 @@ for idx, kick_row in data[
         kick_history_dict = initialize_kickoff_dictionary()
         kick_history_dict, kick_loc, yards_loc \
             = get_kick_distance(kick, kick_history_dict)
-        period_loc = [m.start() for m in re.finditer("\.", kick)]
-        period_loc = np.array(period_loc)
-        sum_period_loc = np.sum(period_loc < kick_loc[0])
-        first_item_loc \
-            = period_loc[np.max(np.where(period_loc < kick_loc[0]))] - 1
-        period_loc = period_loc[period_loc > kick_loc[0]]
-        if sum_period_loc > 1:
-            # Need to clean up values in case there is some random sentence
-            # before kick off info
-            kick = kick[first_item_loc:]
-            kick_loc = [m.end() for m in re.finditer("kicks", kick)]
-            yards_loc = [m.start() for m in re.finditer("yard", kick)]
-            period_loc = [m.start() for m in re.finditer("\.", kick)]
-            period_loc = np.array(period_loc)
-            period_loc = period_loc[period_loc > kick_loc[0]]
+        # Clean up kick row info
+        kick, kick_loc, yards_loc, period_loc \
+            = clean_kick_row(kick, kick_loc, yards_loc)
         if kick.lower().find("fair catch") != -1:
             period_loc = [m.start() for m in re.finditer("fair catch", kick)]
         to_loc_end = [m.end() for m in re.finditer(" to ", kick)]
