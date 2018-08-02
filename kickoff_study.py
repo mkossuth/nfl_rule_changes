@@ -30,6 +30,11 @@ def initialize_kickoff_dictionary():
     kick_history_dict["pushed_ob"] = 0
     kick_history_dict["kicked_ob"] = 0
     kick_history_dict["ran_ob"] = 0
+    kick_history_dict["touchback"] = 0
+    kick_history_dict["touchdown"] = 0
+    kick_history_dict["onside"] = 0
+    kick_history_dict["fumble"] = 0
+    kick_history_dict["turnover"] = 0
     return kick_history_dict
 
 
@@ -74,13 +79,15 @@ def get_touchback_info(kick, kick_history_dict, data, idx):
         = "{} {}".format(data.loc[idx, "def"], 20)
     kick_history_dict["to_tm_yd"] = kick_history_dict["def"]
     kick_history_dict["to_yd_line"] \
-        = 100 - (kick_history_dict["from_yd_line"]
-            + kick_history_dict["kick_dist"])
+        = 100 - (
+            kick_history_dict["from_yd_line"] + kick_history_dict["kick_dist"]
+        )
     kick_history_dict["kick_ret_dist"] = 0
     return kick_history_dict
 
 
 def get_out_of_bounds_info(kick, kick_history_dict, data, idx):
+    """Get out of bounds return yard line and return kick_history_dict."""
     if data.loc[idx+1, "ydline"] > 50:
         kick_history_dict["kick_ret_yd_line"] \
             = "{} {}".format(
@@ -94,6 +101,79 @@ def get_out_of_bounds_info(kick, kick_history_dict, data, idx):
                 data.loc[idx+1, "ydline"]
             )
     return kick_history_dict
+
+
+def get_fair_catch_info(kick_history_dict):
+    """Return fair catch info."""
+    kick_history_dict["kick_ret_dist"] = 0
+    kick_history_dict["kick_ret_yd_line"] = kick_history_dict["to_yd"]
+    kick_history_dict["fair_catch"] = 1
+    return kick_history_dict
+
+
+def split_to_yard_line_info(kick_history_dict):
+    [kick_history_dict["to_tm_yd"], kick_history_dict["to_yd_line"]] \
+        = str.split(kick_history_dict["to_yd"])
+    kick_history_dict["to_yd_line"] = int(kick_history_dict["to_yd_line"])
+    return kick_history_dict
+
+
+def split_no_gain_info(kick, kick_history_dict, to_loc_end, period_loc):
+    """Return kick info for no gain on return."""
+    kick_history_dict["kick_ret_dist"] = 0
+    kick_history_dict["kick_ret_yd_line"] = kick[to_loc_end[0]:(period_loc[0])]
+    return kick_history_dict
+
+
+def kick_return_info(kick,
+                     kick_history_dict,
+                     to_loc_end,
+                     yards_loc,
+                     data,
+                     idx):
+    """Get kick return info, including touchdowns."""
+    for_loc_start, for_loc_end = find_for_in_desc(kick)
+    kick_history_dict["kick_ret_dist"] \
+        = int(kick[for_loc_end[0]:(yards_loc[1])])
+    if kick.lower().find("touchdown") != -1:
+        kick_history_dict["touchdown"] = 1
+        kick_history_dict["kick_ret_yd_line"] \
+            = "{} {}".format(data.loc[idx, "off"], 0)
+    else:
+        kick_history_dict["touchdown"] = 0
+        kick_history_dict["kick_ret_yd_line"] \
+            = kick[to_loc_end[1]:for_loc_start[0]]
+    kick_history_dict = parse_kick_return_info(kick_history_dict)
+    return kick_history_dict
+
+
+def parse_kick_return_info(kick_history_dict):
+    """Parse kick return info, watching for 50 yard line."""
+    if kick_history_dict["kick_ret_yd_line"] == "50":
+        kick_history_dict["kick_ret_tm_yd"] = "NA"
+        kick_history_dict["kick_ret_line"] = 50
+    else:
+        [
+            kick_history_dict["kick_ret_tm_yd"],
+            kick_history_dict["kick_ret_line"]
+        ] = str.split(kick_history_dict["kick_ret_yd_line"])
+    return kick_history_dict
+
+
+def split_ob_info(kick, kick_history_dict):
+    """Split line where ob is in text."""
+    at_loc_end = [m.end() for m in re.finditer(" at ", kick)]
+    for_loc_start, for_loc_end = find_for_in_desc(kick)
+    kick_history_dict["kick_ret_yd_line"] \
+        = kick[at_loc_end[0]:for_loc_start[0]]
+    return kick_history_dict
+
+
+def find_for_in_desc(kick):
+    """Find the word for in the play description."""
+    for_loc_start = [m.start() for m in re.finditer(" for ", kick)]
+    for_loc_end = [m.end() for m in re.finditer(" for ", kick)]
+    return for_loc_start, for_loc_end
 
 
 # TODO look at results of drive to see how often score based on kickoff
@@ -142,9 +222,10 @@ for idx, kick_row in data[
         pass
         #print("lateral")
         #print(kick)
-    elif kick.lower().find("touchdown") != -1:
-        print("touchdown")
-        print(kick)
+    elif kick.lower().find("challenge") != -1:
+        pass
+        #print("challenge")
+        #print(kick)
     else:
         kick_history_dict = initialize_kickoff_dictionary()
         kick_history_dict, kick_loc, yards_loc \
@@ -161,59 +242,32 @@ for idx, kick_row in data[
         kick_history_dict["to_yd"] = kick[to_loc_end[0]:(period_loc[0])]
         # Check for a touchback
         if kick.lower().find("touchback") != -1:
+            kick_history_dict["touchback"] = 1
             kick_history_dict = get_touchback_info(
                 kick, kick_history_dict, data, idx
             )
         elif kick.lower().find("out of bounds") != -1:
-            # JAK
             kick_history_dict = get_out_of_bounds_info(
-                kick,
-                kick_history_dict,
-                data,
-                idx
+                kick, kick_history_dict, data, idx
             )
-        elif kick.lower().find("touchdown") != -1:
-            pass           
         else:
-            [
-                kick_history_dict["to_tm_yd"],
-                kick_history_dict["to_yd_line"]
-            ] = str.split(kick_history_dict["to_yd"])
-            kick_history_dict["to_yd_line"] \
-                = int(kick_history_dict["to_yd_line"])
-            kick_history_dict["touchback"] = 0
-            for_loc_start = [m.start() for m in re.finditer(" for ", kick)]
-            for_loc_end = [m.end() for m in re.finditer(" for ", kick)]
+            kick_history_dict = split_to_yard_line_info(kick_history_dict)
             if kick.lower().find("fair catch") != -1:
-                kick_history_dict["kick_ret_dist"] = 0
-                kick_history_dict["kick_ret_yd_line"] \
-                    = kick_history_dict["to_yd"]
-                kick_history_dict["fair_catch"] = 1
+                kick_history_dict = get_fair_catch_info(kick_history_dict)
             elif kick.lower().find("no gain") != -1:
-                kick_history_dict["kick_ret_dist"] = 0
-                kick_history_dict["kick_ret_yd_line"] \
-                    = kick[to_loc_end[0]:(period_loc[0])]
+                kick_history_dict = split_no_gain_info(
+                    kick, kick_history_dict, to_loc_end, period_loc
+                )
             elif kick.lower().find(" ob") != -1:
-                at_loc_end = [m.end() for m in re.finditer(" at ", kick)]
-                kick_history_dict["kick_ret_yd_line"] \
-                    = kick[at_loc_end[0]:for_loc_start[0]]
+                kick_history_dict = split_ob_info(kick, kick_history_dict)
             else:
-                kick_history_dict["kick_ret_dist"] \
-                    = int(kick[for_loc_end[0]:(yards_loc[1])])
-                kick_history_dict["kick_ret_yd_line"] \
-                    = kick[to_loc_end[1]:for_loc_start[0]]
-        if kick_history_dict["kick_ret_yd_line"] == "50":
-            kick_history_dict["kick_ret_tm_yd"] = "NA"
-            kick_history_dict["kick_ret_line"] = 50
-        else:
-            [
-                kick_history_dict["kick_ret_tm_yd"],
-                kick_history_dict["kick_ret_line"]
-            ] = str.split(kick_history_dict["kick_ret_yd_line"])
-        kick_history_dict["onside"] = 0
-        kick_history_dict["touchdown"] = 0
-        kick_history_dict["fumble"] = 0
-        kick_history_dict["turnover"] = 0
+                kick_history_dict = kick_return_info(
+                    kick,
+                    kick_history_dict,
+                    to_loc_end,
+                    yards_loc,
+                    data,
+                    idx)
         if kick.lower().find("ran ob") != -1:
             kick_history_dict["ran_ob"] = 1
         if kick.lower().find("pushed ob") != -1:
@@ -223,3 +277,4 @@ for idx, kick_row in data[
         kick_history_df = kick_history_df.append(
             pd.Series(kick_history_dict), ignore_index=True
         )
+        kick_history_df.to_csv("test.csv")
