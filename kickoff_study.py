@@ -12,7 +12,11 @@ import numpy as np
 
 def get_kick_distance(kick, kick_history_dict):
     """get kickoff distance."""
-    kick_loc = [m.end() for m in re.finditer("kicks", kick)]
+    if kick.lower().find("kicks onside") != -1:
+        kick_loc = [m.end() for m in re.finditer("kicks onside", kick)]
+        kick_history_dict["onside_kick"] = 1
+    else:
+        kick_loc = [m.end() for m in re.finditer("kicks", kick)]
     yards_loc = [m.start() for m in re.finditer("yard", kick)]
     yards_loc = [idx for idx in yards_loc if idx > kick_loc[0]]
     kick_dist = int(kick[kick_loc[0]:(yards_loc[0] - 1)])
@@ -32,7 +36,8 @@ def initialize_kickoff_dictionary():
     kick_history_dict["ran_ob"] = 0
     kick_history_dict["touchback"] = 0
     kick_history_dict["touchdown"] = 0
-    kick_history_dict["onside"] = 0
+    kick_history_dict["onside_kick"] = 0
+    kick_history_dict["onside_success"] = 0    
     kick_history_dict["fumble"] = 0
     kick_history_dict["turnover"] = 0
     return kick_history_dict
@@ -83,6 +88,7 @@ def get_touchback_info(kick, kick_history_dict, data, idx):
             kick_history_dict["from_yd_line"] + kick_history_dict["kick_dist"]
         )
     kick_history_dict["kick_ret_dist"] = 0
+    kick_history_dict = parse_kick_return_info(kick_history_dict)
     return kick_history_dict
 
 
@@ -187,7 +193,8 @@ kick_history_df = pd.DataFrame(
              "from_yd", "from_tm_yd", "from_yd_line",
              "to_yd", "to_tm_yd", "to_yd_line",
              "kick_dist", "kick_ret_dist", "kick_ret_yd_line",
-             "onside",
+             "onside_kick",
+             "onside_success",
              "touchdown",
              "fumble",
              "ran_ob",
@@ -202,11 +209,7 @@ for idx, kick_row in data[
     kick_row = kick_row.drop(["down", "togo", "ydline"])
     kick = kick_row.description
     #  Check if kick off touchdown #(?=.*TOUCHDOWN)")
-    if kick.lower().find("onside") != -1:
-        pass
-        #print("Onside")
-        #print(kick)
-    elif kick.lower().find("penalty") != -1:
+    if kick.lower().find("penalty") != -1:
         pass
         #print("penalty")
         #print(kick)
@@ -250,6 +253,14 @@ for idx, kick_row in data[
             kick_history_dict = get_out_of_bounds_info(
                 kick, kick_history_dict, data, idx
             )
+        elif np.logical_and(
+                kick.lower().find("onside") != -1,
+                kick.lower().find("recovered") != -1):
+            # Onside kick recovered by kicking team
+            kick_history_dict["onside_success"] = 1
+            kick_history_dict = split_no_gain_info(
+                kick, kick_history_dict, to_loc_end, period_loc
+            )                        
         else:
             kick_history_dict = split_to_yard_line_info(kick_history_dict)
             if kick.lower().find("fair catch") != -1:
@@ -274,6 +285,7 @@ for idx, kick_row in data[
             kick_history_dict["pushed_ob"] = 1
         if kick.lower().find("out of bounds") != -1:
             kick_history_dict["kicked_ob"] = 1
+        kick_history_dict = parse_kick_return_info(kick_history_dict)
         kick_history_df = kick_history_df.append(
             pd.Series(kick_history_dict), ignore_index=True
         )
