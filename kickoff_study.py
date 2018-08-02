@@ -49,7 +49,7 @@ def clean_kick_row(kick, kick_loc, yards_loc):
         yards_loc = [m.start() for m in re.finditer("yard", kick)]
         period_loc = [m.start() for m in re.finditer("\.", kick)]
         period_loc = np.array(period_loc)
-        period_loc = period_loc[period_loc > kick_loc[0]]    
+        period_loc = period_loc[period_loc > kick_loc[0]]
     return kick, kick_loc, yards_loc, period_loc
 
 
@@ -65,7 +65,7 @@ def get_kickoff_location(kick, kick_history_dict):
     kick_history_dict["from_tm_yd"] = kick_from_tm_yd
     kick_history_dict["from_yd_line"] = kick_from_yd_line
     return kick_history_dict
-        
+
 
 def get_touchback_info(kick, kick_history_dict, data, idx):
     """Get touchback info and return kick_history_dict."""
@@ -75,10 +75,27 @@ def get_touchback_info(kick, kick_history_dict, data, idx):
     kick_history_dict["to_tm_yd"] = kick_history_dict["def"]
     kick_history_dict["to_yd_line"] \
         = 100 - (kick_history_dict["from_yd_line"]
-        + kick_history_dict["kick_dist"])
+            + kick_history_dict["kick_dist"])
     kick_history_dict["kick_ret_dist"] = 0
     return kick_history_dict
-      
+
+
+def get_out_of_bounds_info(kick, kick_history_dict, data, idx):
+    if data.loc[idx+1, "ydline"] > 50:
+        kick_history_dict["kick_ret_yd_line"] \
+            = "{} {}".format(
+                data.loc[idx+1, "off"],
+                100 - data.loc[idx+1, "ydline"]
+            )
+    else:
+        kick_history_dict["kick_ret_yd_line"] \
+            = "{} {}".format(
+                data.loc[idx+1, "def"],
+                data.loc[idx+1, "ydline"]
+            )
+    return kick_history_dict
+
+
 # TODO look at results of drive to see how often score based on kickoff
 # TODO need to consider multiple things happening on kickoff, so can't use elif
 # TODO need to do if statements for all tests
@@ -148,21 +165,15 @@ for idx, kick_row in data[
                 kick, kick_history_dict, data, idx
             )
         elif kick.lower().find("out of bounds") != -1:
-            if data.loc[idx+1, "ydline"] > 50:
-                kick_history_dict["kick_ret_yd_line"] \
-                    = "{} {}".format(
-                        data.loc[idx+1, "off"],
-                        100 - data.loc[idx+1, "ydline"]
-                    )
-            else:
-                kick_history_dict["kick_ret_yd_line"] \
-                    = "{} {}".format(
-                        data.loc[idx+1, "def"],
-                        data.loc[idx+1, "ydline"]
-                    )
+            # JAK
+            kick_history_dict = get_out_of_bounds_info(
+                kick,
+                kick_history_dict,
+                data,
+                idx
+            )
         elif kick.lower().find("touchdown") != -1:
-            pass
-            
+            pass           
         else:
             [
                 kick_history_dict["to_tm_yd"],
@@ -198,7 +209,7 @@ for idx, kick_row in data[
             [
                 kick_history_dict["kick_ret_tm_yd"],
                 kick_history_dict["kick_ret_line"]
-            ] = str.split(kick_history_dict["kick_ret_yd_line"])       
+            ] = str.split(kick_history_dict["kick_ret_yd_line"])
         kick_history_dict["onside"] = 0
         kick_history_dict["touchdown"] = 0
         kick_history_dict["fumble"] = 0
