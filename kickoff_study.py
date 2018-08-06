@@ -45,6 +45,7 @@ def initialize_kickoff_dictionary():
     kick_history_dict["fumble"] = 0
     kick_history_dict["turnover"] = 0
     kick_history_dict["lateral"] = 0
+    kick_history_dict["no_play"] = 0
     return kick_history_dict
 
 
@@ -203,6 +204,63 @@ def find_for_in_desc(kick):
     for_loc_end = [m.end() for m in re.finditer(" for ", kick)]
     return for_loc_start, for_loc_end
 
+def get_penalty_info(kick_history_dict):
+    """Get penalty information."""
+    kick = kick_history_dict["kick"]
+    penalty_idx = [m.start() for m in re.finditer("penalty on ", kick.lower())]
+    kick_penalty = kick[penalty_idx[0]:]
+    no_play_test = kick.lower().find("no play") != -1
+    declined_test = kick.lower().find("declined") != -1
+    offsetting_test = kick.lower().find("offset") != -1
+    if not no_play_test and not declined_test and not offsetting_test:
+        # This penalty was a valid play, so parse the penalty information
+        # First, keep only the penalty sentence
+        enforced_idx = [
+            m.end() for m in re.finditer("enforced at", kick_penalty.lower())
+        ]
+        period_idx = [
+            m.start() for m in re.finditer("\.", kick_penalty.lower())
+        ]
+        period_idx = [idx for idx in period_idx if idx > enforced_idx[0]]
+        kick_penalty = kick_penalty[:period_idx[0]]
+        space_idx = [m.start() for m in re.finditer(" ", kick_penalty.lower())]
+        dash_idx = [m.start() for m in re.finditer("-", kick_penalty.lower())]
+        if dash_idx:
+            pen_team_idx = np.min((space_idx[0], dash_idx[0]))
+        else:
+            pen_team_idx = space_idx[0]
+        pen_team = kick_penalty[penalty_idx[0]:pen_team_idx]
+        # Add space here so penalty yards is defined by space_idx and yards_loc
+        yards_loc = [
+            m.start() for m in re.finditer(" yards ", kick_penalty.lower())
+        ]
+        yards_start_idx = [
+            idx for idx in space_idx if yards_loc[0] - idx > 1
+        ][-1]
+        kick_history_dict["penalty_yards"] = int(
+            kick_penalty[yards_start_idx:yards_loc[0]]
+        )
+        enforced_yard = kick_penalty[enforced_idx[0]:]
+        kick_history_dict["penalty_loc"] = enforced_yard
+        [
+            kick_history_dict["penalty_tm_yd"],
+            kick_history_dict["penalty_line"]
+        ] = kick_history_dict["penalty_loc"].split()
+        if pen_team.lower() == kick_history_dict["def"].lower():
+            # Penalty on receiving team, so yardage will be backwards
+            kick_history_dict["penalty_on"] = "def"
+        else:
+            # Penalty on kicking team, so yardage will be moved forward
+            kick_history_dict["penalty_on"] = "off"
+        kick_history_dict["penalty_on"] = pen_team
+    elif no_play_test:
+        kick_history_dict["penalty_no_play"] = 1
+    elif declined_test:
+        kick_history_dict["penalty_declined"] = 1
+    elif offsetting_test:
+        kick_history_dict["penalty_offset"] = 1        
+    return kick_history_dict
+
 
 def get_lateral_info(kick_history_dict):
     """Get lateral results and replace final return into kick return info"""
@@ -219,7 +277,6 @@ def get_lateral_info(kick_history_dict):
         kick_ret_dist = int(kick_temp[for_loc_end[0]:(yards_loc[0])])
         kick_history_dict["kick_ret_dist"] += kick_ret_dist
         kick_history_temp = parse_kick_return_info(kick_history_temp)
-        print(kick_history_temp)
         # If ball is on defenders side
         if kick_history_temp["kick_ret_tm_yd"] == kick_history_temp["def"]:
             # But if it was run backwards over the 50
@@ -230,8 +287,6 @@ def get_lateral_info(kick_history_dict):
                 kick_history_dict["kick_ret_line"] \
                     = kick_history_temp["kick_ret_line"]
             else:  # Ball still on same side
-                print("{}; {}".format(kick_history_temp["kick_ret_line"],
-                        kick_history_dict["kick_ret_line"]))
                 kick_history_dict["kick_ret_line"] \
                     = np.max(
                         (
@@ -251,7 +306,8 @@ kick_history_df = pd.DataFrame(
              "offscore", "defscore",
              "from_yd", "from_tm_yd", "from_yd_line",
              "to_yd", "to_tm_yd", "to_yd_line",
-             "kick_dist", "kick_ret_dist", "kick_ret_yd_line",
+             "kick_dist", "kick_ret_dist",
+             "kick_ret_yd_line", "kick_ret_line", "kick_ret_tm_yd",
              "onside_kick",
              "onside_success",
              "touchdown",
@@ -261,30 +317,28 @@ kick_history_df = pd.DataFrame(
              "kicked_ob",
              "fair_catch",
              "turnover",
-             "touchback"])
+             "touchback",
+             "lateral"]
+)
+kick_history_to_do = kick_history_df.copy()
 for idx, kick_row in data[
         data["description"].str.contains(r"^(?=.*kicks)")
         ].iterrows():
     kick_row = kick_row.drop(["down", "togo", "ydline"])
     kick = kick_row.description
     #  Check if kick off touchdown #(?=.*TOUCHDOWN)")
-    if kick.lower().find("penalty") != -1:
-        pass
-        #print("penalty")
-        #print(kick)
-    elif kick.lower().find("challenge") != -1:
-        pass
-        #print("challenge")
-        #print(kick)
+    if kick.lower().find("challenge") != -1:
+        kick_history_to_do = kick_history_to_do.append(
+            pd.Series(kick_row), ignore_index=True
+        )
     elif kick.lower().find("fumble") != -1 or kick.lower().find("muff") != -1:
-        pass
-        #print("fumble")
-        #print(kick)
+        kick_history_to_do = kick_history_to_do.append(
+            pd.Series(kick_row), ignore_index=True
+        )
     elif kick.lower().find("field goal") != -1:
-        pass
-        #print("random field goal issue")
-        #print(kick)
-
+        kick_history_to_do = kick_history_to_do.append(
+            pd.Series(kick_row), ignore_index=True
+        )
     else:
         kick_history_dict = initialize_kickoff_dictionary()
         kick_history_dict, kick_loc, yards_loc \
@@ -335,18 +389,24 @@ for idx, kick_row in data[
                     yards_loc,
                     data,
                     idx)
-                if kick.lower().find("lateral") != -1:
+                if np.logical_or(kick.lower().find("lateral") != -1,
+                                 kick.lower().find("handoff") != -1):
                     kick_history_dict["lateral"] = 1
                     # Update kick return with final lateral location
                     kick_history_dict = get_lateral_info(kick_history_dict)
+        if kick.lower().find("penalty") != -1:
+            kick_history_dict = get_penalty_info(kick_history_dict)
         if kick.lower().find("ran ob") != -1:
             kick_history_dict["ran_ob"] = 1
         if kick.lower().find("pushed ob") != -1:
             kick_history_dict["pushed_ob"] = 1
         if kick.lower().find("out of bounds") != -1:
             kick_history_dict["kicked_ob"] = 1
+        if kick.lower().find("no play") != -1:
+            kick_history_dict["no_play"] = 1
         kick_history_dict = parse_kick_return_info(kick_history_dict)
         kick_history_df = kick_history_df.append(
             pd.Series(kick_history_dict), ignore_index=True
         )
         kick_history_df.to_csv("test.csv")
+        kick_history_to_do.to_csv("to_do.csv")
