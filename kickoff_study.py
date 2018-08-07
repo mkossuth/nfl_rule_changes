@@ -133,11 +133,15 @@ def get_touchback_info(kick_history_dict, data, idx):
 
 def get_out_of_bounds_info(kick_history_dict, data, idx):
     """Get out of bounds return yard line and return kick_history_dict."""
+    # Remove 'out of bounds' from to_yd variable
+    kick_history_dict["to_yd"] \
+        = kick_history_dict["to_yd"].replace("out of bounds", "")
+    kick_history_dict = split_to_yard_line_info(kick_history_dict)
     if data.loc[idx+1, "ydline"] > 50:
         kick_history_dict["kick_ret_yd_line"] \
             = "{} {}".format(
                 data.loc[idx+1, "off"],
-                100 - data.loc[idx+1, "ydline"]
+                int(100 - data.loc[idx+1, "ydline"])
             )
     else:
         kick_history_dict["kick_ret_yd_line"] \
@@ -210,12 +214,13 @@ def parse_kick_return_info(kick_history_dict):
 
 
 def split_ob_info(kick_history_dict):
-    """Split line where ob is in text."""
+    """Record out of bounds info then change 'ob at' to 'to'."""
     kick = kick_history_dict["kick"]
-    at_loc_end = [m.end() for m in re.finditer(" at ", kick)]
-    for_loc_start, for_loc_end = find_for_in_desc(kick)
-    kick_history_dict["kick_ret_yd_line"] \
-        = kick[at_loc_end[0]:for_loc_start[0]]
+    if kick.lower().find("ran ob") != -1:
+        kick_history_dict["ran_ob"] = 1
+    if kick.lower().find("pushed ob") != -1:
+        kick_history_dict["pushed_ob"] = 1
+    kick_history_dict["kick"] = kick.replace("ob at", "to")
     return kick_history_dict
 
 
@@ -363,17 +368,19 @@ for idx, kick_row in data[
         ].iterrows():
     kick_row = kick_row.drop(["down", "togo", "ydline"])
     kick = kick_row.description
-    if kick.lower().find("field goal") != -1:
-        kick_history_to_do = kick_history_to_do.append(
-            pd.Series(kick_row), ignore_index=True
-        )
-    else:
+    try:
         kick_history_dict = initialize_kickoff_dictionary()
         kick_history_dict, kick_loc, yards_loc \
             = get_kick_distance(kick_history_dict)
         # Clean up kick row info
         kick, kick_loc, yards_loc, period_loc \
             = clean_kick_row(kick, kick_loc, yards_loc)
+        # Remove ob text
+        if kick.lower().find(" ob") != -1:
+            kick_history_dict["kick"] = kick
+            kick_history_dict = split_ob_info(kick_history_dict)
+            kick = kick_history_dict["kick"]
+            kick, kick_loc, yards_loc, period_loc = index_kick_row(kick)
         kick_history_dict["kick"] = kick
         if kick.lower().find("challenge") != -1:
             kick_history_dict = get_challenge_info(kick_history_dict)
@@ -410,11 +417,8 @@ for idx, kick_row in data[
                 kick_history_dict = split_no_gain_info(
                     kick_history_dict, to_loc_end, period_loc
                 )
-            elif kick.lower().find(" ob") != -1:
-                kick_history_dict = split_ob_info(kick_history_dict)
             elif (kick.lower().find("fumble") != -1
                   or kick.lower().find("muff") != -1):
-                print("fumble")
                 kick_history_dict = get_fumble_info(kick_history_dict)
             else:
                 kick_history_dict = kick_return_info(
@@ -430,17 +434,18 @@ for idx, kick_row in data[
                     kick_history_dict = get_lateral_info(kick_history_dict)
         if kick.lower().find("penalty") != -1:
             kick_history_dict = get_penalty_info(kick_history_dict)
-        if kick.lower().find("ran ob") != -1:
-            kick_history_dict["ran_ob"] = 1
-        if kick.lower().find("pushed ob") != -1:
-            kick_history_dict["pushed_ob"] = 1
         if kick.lower().find("out of bounds") != -1:
             kick_history_dict["kicked_ob"] = 1
+            kick_history_dict["kick_ret_dist"] = 0
         if kick.lower().find("no play") != -1:
             kick_history_dict["no_play"] = 1
         kick_history_dict = parse_kick_return_info(kick_history_dict)
         kick_history_df = kick_history_df.append(
             pd.Series(kick_history_dict), ignore_index=True
+        )
+    except:
+        kick_history_to_do = kick_history_to_do.append(
+            pd.Series(kick_row), ignore_index=True
         )
 kick_history_df.to_csv("test.csv")
 kick_history_to_do.to_csv("to_do.csv")
