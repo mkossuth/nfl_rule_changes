@@ -341,29 +341,29 @@ def get_lateral_info(kick_history_dict):
 # TODO look at results of drive to see how often score based on kickoff
 # TODO need to consider multiple things happening on kickoff, so can't use elif
 # TODO need to do if statements for all tests
+kick_history_df = pd.DataFrame(
+    columns=["gameid", "season", "qtr", "min", "sec",
+             "off", "def", "description",
+             "offscore", "defscore",
+             "from_yd", "from_tm_yd", "from_yd_line",
+             "to_yd", "to_tm_yd", "to_yd_line",
+             "kick_dist", "kick_ret_dist",
+             "kick_ret_yd_line", "kick_ret_line", "kick_ret_tm_yd",
+             "onside_kick",
+             "onside_success",
+             "touchdown",
+             "fumble",
+             "ran_ob",
+             "pushed_ob",
+             "kicked_ob",
+             "fair_catch",
+             "turnover",
+             "touchback",
+             "lateral"]
+)
+kick_history_to_do = kick_history_df.copy()
 for f_name in glob.glob("*nfl_pbp_data.csv"):
     data = pd.read_csv(f_name)
-    kick_history_df = pd.DataFrame(
-        columns=["gameid", "season", "qtr", "min", "sec",
-                 "off", "def", "description",
-                 "offscore", "defscore",
-                 "from_yd", "from_tm_yd", "from_yd_line",
-                 "to_yd", "to_tm_yd", "to_yd_line",
-                 "kick_dist", "kick_ret_dist",
-                 "kick_ret_yd_line", "kick_ret_line", "kick_ret_tm_yd",
-                 "onside_kick",
-                 "onside_success",
-                 "touchdown",
-                 "fumble",
-                 "ran_ob",
-                 "pushed_ob",
-                 "kicked_ob",
-                 "fair_catch",
-                 "turnover",
-                 "touchback",
-                 "lateral"]
-    )
-    kick_history_to_do = kick_history_df.copy()
     for idx, kick_row in data[
             data["description"].str.contains(r"^(?=.*kicks)")
             ].iterrows():
