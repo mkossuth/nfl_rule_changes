@@ -442,5 +442,5 @@ for idx, kick_row in data[
         kick_history_df = kick_history_df.append(
             pd.Series(kick_history_dict), ignore_index=True
         )
-        kick_history_df.to_csv("test.csv")
-        kick_history_to_do.to_csv("to_do.csv")
+kick_history_df.to_csv("test.csv")
+kick_history_to_do.to_csv("to_do.csv")
