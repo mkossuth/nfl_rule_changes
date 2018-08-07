@@ -386,6 +386,7 @@ kick_history_df = pd.DataFrame(
 )
 kick_history_to_do = kick_history_df.copy()
 for f_name in glob.glob("*nfl_pbp_data.csv"):
+    print(f_name)
     data = pd.read_csv(f_name).dropna(subset=["gameid"])
     for idx, kick_row in data[
             data["description"].str.contains(r"^(?=.*kicks)")
@@ -470,7 +471,8 @@ for f_name in glob.glob("*nfl_pbp_data.csv"):
             kick_history_df = kick_history_df.append(
                 pd.Series(kick_history_dict), ignore_index=True
             )
-        except:
+        except (ValueError, IndexError) as err:
+            kick_row["error"] = err
             kick_history_to_do = kick_history_to_do.append(
                 pd.Series(kick_row), ignore_index=True
             )
