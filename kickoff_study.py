@@ -46,6 +46,16 @@ def initialize_kickoff_dictionary():
     kick_history_dict["turnover"] = 0
     kick_history_dict["lateral"] = 0
     kick_history_dict["no_play"] = 0
+    kick_history_dict["penalty_line"] = 0
+    kick_history_dict["penalty_loc"] = 0
+    kick_history_dict["penalty_on"] = 0
+    kick_history_dict["penalty_tm_yd"] = 0
+    kick_history_dict["penalty_yards"] = 0
+    kick_history_dict["penalty_declined"] = 0
+    kick_history_dict["penalty_no_play"] = 0
+    kick_history_dict["penalty_offset"] = 0
+    kick_history_dict["challenge"] = 0
+    kick_history_dict["reversed"] = 0
     return kick_history_dict
 
 
@@ -342,28 +352,41 @@ def get_lateral_info(kick_history_dict):
 # TODO need to consider multiple things happening on kickoff, so can't use elif
 # TODO need to do if statements for all tests
 kick_history_df = pd.DataFrame(
-    columns=["gameid", "season", "qtr", "min", "sec",
-             "off", "def", "description",
-             "offscore", "defscore",
-             "from_yd", "from_tm_yd", "from_yd_line",
-             "to_yd", "to_tm_yd", "to_yd_line",
-             "kick_dist", "kick_ret_dist",
-             "kick_ret_yd_line", "kick_ret_line", "kick_ret_tm_yd",
-             "onside_kick",
-             "onside_success",
-             "touchdown",
-             "fumble",
-             "ran_ob",
-             "pushed_ob",
-             "kicked_ob",
-             "fair_catch",
-             "turnover",
-             "touchback",
-             "lateral"]
+    columns=[
+        "gameid", "season", "qtr", "min", "sec",
+         "off", "def", "description",
+         "offscore", "defscore",
+         "from_yd", "from_tm_yd", "from_yd_line",
+         "to_yd", "to_tm_yd", "to_yd_line",
+         "kick_dist", "kick_ret_dist",
+         "kick_ret_yd_line", "kick_ret_line", "kick_ret_tm_yd",
+         "onside_kick",
+         "onside_success",
+         "touchdown",
+         "fumble",
+         "ran_ob",
+         "pushed_ob",
+         "kicked_ob",
+         "fair_catch",
+         "turnover",
+         "touchback",
+         "lateral",
+        "no_play",
+        "penalty_line",
+        "penalty_loc",
+        "penalty_on",
+        "penalty_tm_yd",
+        "penalty_yards",
+        "penalty_declined",
+        "penalty_no_play",
+        "penalty_offset",
+        "challenge",
+        "reversed"
+    ]
 )
 kick_history_to_do = kick_history_df.copy()
 for f_name in glob.glob("*nfl_pbp_data.csv"):
-    data = pd.read_csv(f_name)
+    data = pd.read_csv(f_name).dropna(subset=["gameid"])
     for idx, kick_row in data[
             data["description"].str.contains(r"^(?=.*kicks)")
             ].iterrows():
@@ -412,6 +435,7 @@ for f_name in glob.glob("*nfl_pbp_data.csv"):
                 kick_history_dict = split_no_gain_info(
                     kick_history_dict, to_loc_end, period_loc
                 )
+                kick_history_dict = split_to_yard_line_info(kick_history_dict)
             else:
                 kick_history_dict = split_to_yard_line_info(kick_history_dict)
                 if kick.lower().find("fair catch") != -1:
