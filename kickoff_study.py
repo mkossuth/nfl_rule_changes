@@ -21,7 +21,7 @@ def get_kick_distance(kick_history_dict):
         kick_history_dict["onside_kick"] = 1
     else:
         kick_loc = [m.end() for m in re.finditer("kicks", kick)]
-    yards_loc = [m.start() for m in re.finditer("yard", kick)]
+    yards_loc = [m.start() for m in re.finditer(" yard", kick)]
     yards_loc = [idx for idx in yards_loc if idx > kick_loc[0]]
     kick_dist = int(kick[kick_loc[0]:(yards_loc[0] - 1)])
     kick_history_dict["kick_dist"] = kick_dist
@@ -97,6 +97,8 @@ def clean_kick_row(kick, kick_loc, yards_loc):
     if kick.lower().find("didn't try to advance") != -1:
         kick = kick.replace("didn't try to advance", "")
         kick, kick_loc, yards_loc, period_loc = index_kick_row(kick)
+    # Remove commas
+    kick = kick.replace(",", " ")
     period_loc = [m.start() for m in re.finditer("\.", kick)]
     period_loc = np.array(period_loc)
     sum_period_loc = np.sum(period_loc < kick_loc[0])
@@ -354,23 +356,23 @@ def get_lateral_info(kick_history_dict):
 kick_history_df = pd.DataFrame(
     columns=[
         "gameid", "season", "qtr", "min", "sec",
-         "off", "def", "description",
-         "offscore", "defscore",
-         "from_yd", "from_tm_yd", "from_yd_line",
-         "to_yd", "to_tm_yd", "to_yd_line",
-         "kick_dist", "kick_ret_dist",
-         "kick_ret_yd_line", "kick_ret_line", "kick_ret_tm_yd",
-         "onside_kick",
-         "onside_success",
-         "touchdown",
-         "fumble",
-         "ran_ob",
-         "pushed_ob",
-         "kicked_ob",
-         "fair_catch",
-         "turnover",
-         "touchback",
-         "lateral",
+        "off", "def", "description",
+        "offscore", "defscore",
+        "from_yd", "from_tm_yd", "from_yd_line",
+        "to_yd", "to_tm_yd", "to_yd_line",
+        "kick_dist", "kick_ret_dist",
+        "kick_ret_yd_line", "kick_ret_line", "kick_ret_tm_yd",
+        "onside_kick",
+        "onside_success",
+        "touchdown",
+        "fumble",
+        "ran_ob",
+        "pushed_ob",
+        "kicked_ob",
+        "fair_catch",
+        "turnover",
+        "touchback",
+        "lateral",
         "no_play",
         "penalty_line",
         "penalty_loc",
@@ -384,14 +386,51 @@ kick_history_df = pd.DataFrame(
         "reversed"
     ]
 )
+
+format_dict = {
+    "DefensiveTeam": "def",
+    "DefTeamScore": "defscore",
+    "desc": "description",
+    "down": "down",
+    "GameID": "gameid",
+    "posteam": "off",
+    "PosTeamScore": "offscore",
+    "qtr": "qtr",
+    "Season": "season",
+    "ydstogo": "togo",
+    "yrdln": "ydline"
+}
 kick_history_to_do = kick_history_df.copy()
-for f_name in glob.glob("*nfl_pbp_data.csv"):
+for f_name in glob.glob("NFL Play by Play 2009-2017 (v4).csv"):
     print(f_name)
-    data = pd.read_csv(f_name).dropna(subset=["gameid"])
+    try:
+        data = pd.read_csv(
+            f_name,
+            encoding="ISO-8859-1"
+        ).dropna(subset=["gameid"])
+    except KeyError:
+        data = pd.read_csv(
+            f_name,
+            encoding="ISO-8859-1"
+        ).dropna(subset=["GameID", "desc"])
+        cols_orig = data.columns
+        # Using different format, need to rename
+        data = data.rename(columns=format_dict)
+        temp_time = data["time"].str.split(":", expand=True)
+        data["min"] = temp_time[0]
+        data["sec"] = temp_time[1]
+        data = data.drop(columns=cols_orig.difference(format_dict.keys()))
     for idx, kick_row in data[
-            data["description"].str.contains(r"^(?=.*kicks)")
+                np.logical_and(
+                    data["season"] > 2012,
+                    data["description"].str.contains(r"^(?=.*kicks)")
+                )
             ].iterrows():
-        kick_row = kick_row.drop(["down", "togo", "ydline"])
+        try:
+            kick_row = kick_row.drop(["down", "togo", "ydline"])
+        except KeyError:
+            print("DataFrame already shortened.")
+        # TODO should ydline be kept and used as kickoff location?
         kick = kick_row.description
         try:
             kick_history_dict = initialize_kickoff_dictionary()
@@ -471,10 +510,10 @@ for f_name in glob.glob("*nfl_pbp_data.csv"):
             kick_history_df = kick_history_df.append(
                 pd.Series(kick_history_dict), ignore_index=True
             )
-        except (ValueError, IndexError) as err:
+        except (ValueError, IndexError, TypeError, UnicodeDecodeError) as err:
             kick_row["error"] = err
             kick_history_to_do = kick_history_to_do.append(
                 pd.Series(kick_row), ignore_index=True
             )
-kick_history_df.to_csv("test.csv")
-kick_history_to_do.to_csv("to_do.csv")
+kick_history_df.to_csv("test2017A.csv")
+kick_history_to_do.to_csv("to_do2017A.csv")
